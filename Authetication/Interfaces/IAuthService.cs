@@ -7,5 +7,7 @@ namespace Authetication.Interfaces
     {
         Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request);
         Task<AuthResponseDto> LoginAsync(LoginRequestDto request);
+        Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request);
+        Task<bool> LogoutAsync(LogoutRequestDto request);
     }
 }

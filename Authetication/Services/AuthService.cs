@@ -101,5 +101,105 @@ namespace Authetication.Services
                 Role = user.Role
             };
         }
+
+        // ─── Refresh Token ────────────────────────────────────────
+        public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request)
+        {
+            // Step 1: Extract claims from expired access token
+            var principal = _tokenService
+                .GetPrincipalFromExpiredToken(request.AccessToken);
+
+            if (principal == null)
+                throw new UnauthorizedAccessException("Invalid access token.");
+
+            // Step 2: Get userId from claims
+            var userIdClaim = principal.FindFirst("sub")
+                           ?? principal.FindFirst(
+                               System.Security.Claims.ClaimTypes.NameIdentifier);
+
+            if (userIdClaim == null)
+                throw new UnauthorizedAccessException("Invalid token claims.");
+
+            var userId = int.Parse(userIdClaim.Value);
+
+            // Step 3: Find user in database
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null)
+                throw new UnauthorizedAccessException("User not found.");
+
+            // Step 4: Find the refresh token in database
+            var storedRefreshToken = await _context.RefreshTokens
+                .FirstOrDefaultAsync(r =>
+                    r.Token == request.RefreshToken &&
+                    r.UserId == userId);
+
+            if (storedRefreshToken == null)
+                throw new UnauthorizedAccessException("Refresh token not found.");
+
+            // Step 5: Validate refresh token state
+            if (storedRefreshToken.IsRevoked)
+                throw new UnauthorizedAccessException("Refresh token has been revoked.");
+
+            if (storedRefreshToken.IsUsed)
+                throw new UnauthorizedAccessException("Refresh token has already been used.");
+
+            if (storedRefreshToken.ExpiresAt < DateTime.UtcNow)
+                throw new UnauthorizedAccessException("Refresh token has expired.");
+
+            // Step 6: Mark old refresh token as used (Token Rotation)
+            storedRefreshToken.IsUsed = true;
+            _context.RefreshTokens.Update(storedRefreshToken);
+
+            // Step 7: Generate brand new tokens
+            var newAccessToken = _tokenService.GenerateAccessToken(user);
+            var newRefreshToken = _tokenService.GenerateRefreshToken();
+
+            // Step 8: Save new refresh token to database
+            var newRefreshTokenEntity = new RefreshToken
+            {
+                Token = newRefreshToken,
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpiryDays),
+                CreatedAt = DateTime.UtcNow,
+                IsRevoked = false,
+                IsUsed = false
+            };
+
+            await _context.RefreshTokens.AddAsync(newRefreshTokenEntity);
+            await _context.SaveChangesAsync();
+
+            // Step 9: Return new tokens
+            return new AuthResponseDto
+            {
+                AccessToken = newAccessToken,
+                RefreshToken = newRefreshToken,
+                AccessTokenExpiry = DateTime.UtcNow
+                    .AddMinutes(_jwtSettings.AccessTokenExpiryMinutes),
+                Email = user.Email,
+                FullName = user.FullName,
+                Role = user.Role
+            };
+        }
+
+        // ─── Logout ───────────────────────────────────────────────
+        public async Task<bool> LogoutAsync(LogoutRequestDto request)
+        {
+            // Find the refresh token in database
+            var storedRefreshToken = await _context.RefreshTokens
+                .FirstOrDefaultAsync(r => r.Token == request.RefreshToken);
+
+            // If token doesn't exist — already logged out
+            if (storedRefreshToken == null)
+                return true;
+
+            // Mark as revoked — can never be used again
+            storedRefreshToken.IsRevoked = true;
+            _context.RefreshTokens.Update(storedRefreshToken);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
     }
 }

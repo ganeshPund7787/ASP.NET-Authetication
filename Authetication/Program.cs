@@ -1,12 +1,13 @@
 using Authetication.Configuration;
 using Authetication.Data;
 using Authetication.Interfaces;
+using Authetication.Middleware;
 using Authetication.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Scalar.AspNetCore;
+using System.Text;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -75,6 +76,9 @@ builder.Services.AddOpenApi(options =>
 
 // ─── Build App ────────────────────────────────────────────────
 var app = builder.Build();
+
+// ─── Exception Middleware FIRST ─────
+app.UseMiddleware<ExceptionMiddleware>();
 
 // ─── Middleware Pipeline ──────────────────────────────────────
 if (app.Environment.IsDevelopment())

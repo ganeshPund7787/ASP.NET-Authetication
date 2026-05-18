@@ -2,35 +2,28 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
-namespace Authetication.Controllers
+namespace AuthSystem.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]                         // ← All endpoints require authentication
+    [Authorize]
     public class UserController : ControllerBase
     {
         // ─── Any authenticated user ───────────────────────────────
         [HttpGet("profile")]
         public IActionResult GetProfile()
         {
-            // Extract claims from JWT token
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                      ?? User.FindFirst("sub")?.Value;
+            var userId = User.FindFirst("sub")?.Value
+                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var email = User.FindFirst(ClaimTypes.Email)?.Value
-                     ?? User.FindFirst("email")?.Value;
+                        ?? User.FindFirst("email")?.Value;
             var fullName = User.FindFirst("fullName")?.Value;
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
 
             return Ok(new
             {
                 message = "Profile retrieved successfully.",
-                profile = new
-                {
-                    userId,
-                    email,
-                    fullName,
-                    role
-                }
+                profile = new { userId, email, fullName, role }
             });
         }
 
@@ -61,7 +54,7 @@ namespace Authetication.Controllers
             });
         }
 
-        // ─── Public inside authenticated controller ────────────────
+        // ─── Public endpoint ──────────────────────────────────────
         [HttpGet("public-info")]
         [AllowAnonymous]
         public IActionResult PublicInfo()
